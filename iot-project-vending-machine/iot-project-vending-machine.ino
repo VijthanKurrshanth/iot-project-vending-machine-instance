@@ -62,6 +62,8 @@ char locations[][50] = {"K-Zone", "1.6 km", "vm9",
 "Lotus Tower", "20.6 km", "vm3"
 };
 
+DynamicJsonDocument locationDoc(768);
+
 // 'mainMenuOled', 128x64px
 const unsigned char mainMenuOled [] PROGMEM = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
@@ -498,6 +500,7 @@ void setup() {
   display.clearDisplay();
 
   cartInit();
+  locationInit();
 
   //buy();
 }
@@ -546,6 +549,10 @@ void loop() {
       display.clearDisplay();
       nearbyLocations();
       break;
+    case 2:
+      display.clearDisplay();
+      seeProductsMenu();
+
     default:
       // statements
       break;
@@ -679,7 +686,7 @@ void setQuantity(char pId[4]){
   for(;;){
     mqttClient.poll();
     if (digitalRead(EXIT_PIN) == 1){
-      delay(200);
+      delay(150);
       count++;
       if (count == 26){
         count = 0;
@@ -1037,6 +1044,250 @@ void buyMenu2 (const char* vId){
     //   display.clearDisplay();
     //   setQuantity(pName);
     // }
+    // if (digitalRead(CART_PIN) == 1){
+    //   delay(200);
+    //   display.clearDisplay();
+    //   cartView();
+    // }
+  }
+}
+
+void seeProductsMenu(){
+  int index = 0;
+  display.drawBitmap(26, 25, buyMenuallArray[index], 75, 12, 1);
+  display.display();
+  for(;;){
+    mqttClient.poll();
+    if (digitalRead(DOWN_PIN) == 1){
+      delay(200);
+      index++;
+      display.clearDisplay();
+      if (index == 10){
+        index = 0;
+      }
+      display.drawBitmap(26, 25, buyMenuallArray[index], 75, 12, 1);
+      display.display();
+    }
+    if (digitalRead(ENTER_PIN) == 1){
+      processingDisp();
+      delay(200);
+      char pId[4];
+      sprintf(pId, "p%d", index+1);
+      product(pId);
+      display.clearDisplay();
+      seeProduct(index);
+      display.clearDisplay();
+      delay(1000);
+    }
+    if (digitalRead(EXIT_PIN) == 1){
+      delay(200);
+      display.clearDisplay();
+      break;
+    }
+  }
+}
+
+void product(char pId[4]){
+  productQuery["id"] = "vm10";
+  productQuery["requestType"] = "product";
+  productQuery["requestId"] = pId;
+
+  String payload;
+  serializeJson(productQuery, payload);
+
+  bool retained = false;
+  int qos = 1;
+  bool dup = false;
+
+  mqttClient.beginMessage(queryTopic, payload.length(), retained, qos, dup);
+  mqttClient.print(payload);
+  mqttClient.endMessage();
+  delay(1000); //delay to recieve response
+}
+
+void seeProduct(int index){
+  int messageSize = mqttClient.parseMessage();
+  if (messageSize) {
+    // we received a message, print out the topic and contents
+    Serial.print("Received a message with topic '");
+    Serial.print(mqttClient.messageTopic());
+    Serial.print("', length ");
+    Serial.print(messageSize);
+    Serial.println(" bytes:");
+
+    String payload = "";
+    while (mqttClient.available()) {
+      payload += (char)mqttClient.read();
+    }
+
+    deserializeJson(response, payload);
+
+    if (response["type"] == "product"){
+      productResponse = response;
+      String out;
+      serializeJson(productResponse, out);
+      Serial.print(out);
+      
+    }
+    else{
+      return;
+    }
+  }
+  else{
+    return;
+  }
+  display.clearDisplay();
+  display.display();
+  int menuIndex2 = 0;
+  for(;;){
+    mqttClient.poll();
+    if (digitalRead(DOWN_PIN) == 1){
+      delay(200);
+      menuIndex2++;
+      display.clearDisplay();
+      if (menuIndex2 == 10){
+        menuIndex2 = 0;
+      }
+      display.drawBitmap(26, 4, buyMenuallArray[index], 75, 12, 1);
+      char vId[5];
+      sprintf(vId, "vm%d", menuIndex2+1);
+      display.setTextSize(1);
+      display.setCursor(0,20);
+      String vName = locationDoc[vId];
+      display.println(vName);
+      int price = productResponse["locations"][vId]["price"];
+      int qty = productResponse["locations"][vId]["quantity"];
+      display.setCursor(10, 30);
+      display.println("Price");
+      display.setCursor(58,30);
+      display.println(":");
+      display.setCursor(60,30);
+      display.println(price);
+      display.setCursor(10,40);
+      display.println("Quantity");
+      display.setCursor(58,40);
+      display.println(":");
+      display.setCursor(60,40);
+      display.println(qty);
+      display.display();
+      delay(100);
+    }
+    else{
+      display.drawBitmap(26, 4, buyMenuallArray[index], 75, 12, 1);
+      display.display();
+      char vId[5];
+      sprintf(vId, "vm%d", menuIndex2+1);
+      display.setTextSize(1);
+      display.setCursor(0,20);
+      String vName = locationDoc[vId];
+      Serial.print(vName);
+      display.println(vName);
+      int price = productResponse["locations"][vId]["price"];
+      int qty = productResponse["locations"][vId]["quantity"];
+      display.setCursor(10, 30);
+      display.println("Price");
+      display.setCursor(68,30);
+      display.println(":");
+      display.setCursor(80,30);
+      display.println(price);
+      display.setCursor(10,40);
+      display.println("Quantity");
+      display.setCursor(68,40);
+      display.println(":");
+      display.setCursor(80,40);
+      display.println(qty);
+      display.display();
+      delay(100);
+    }
+    if (digitalRead(EXIT_PIN) == 1){
+      delay(200);
+      display.clearDisplay();
+      return;
+    }
+  }
+}
+
+void locationInit(){
+  locationDoc["vm1"]= "One Galle Face";
+  locationDoc["vm2"]= "Fort Railway station";
+  locationDoc["vm3"]= "Lotus Tower";
+  locationDoc["vm4"]= "Sugathadāsa Stadium";
+  locationDoc["vm5"]= "City Centre";
+  locationDoc["vm6"]= "Majestic City";
+  locationDoc["vm7"]= "BMICH ";
+  locationDoc["vm8"]= "Havelock City Mall";
+  locationDoc["vm9"]= "K-Zone";
+  locationDoc["vm10"]= "UoM";
+}
+
+void resupplyMenu (){
+  int messageSize = mqttClient.parseMessage();
+  if (messageSize) {
+    // we received a message, print out the topic and contents
+    Serial.print("Received a message with topic '");
+    Serial.print(mqttClient.messageTopic());
+    Serial.print("', length ");
+    Serial.print(messageSize);
+    Serial.println(" bytes:");
+
+    String payload = "";
+    while (mqttClient.available()) {
+      payload += (char)mqttClient.read();
+    }
+
+    deserializeJson(response, payload);
+
+    if (response["type"] == "products" && response["id"] == "vm10"){
+      buyResponse = response;
+    }
+    else{
+      return;
+    }
+  }
+  else{
+    return;
+  }
+  int menuIndex2 = 0;
+  for(;;){
+    mqttClient.poll();
+    char pName[4];
+    if (digitalRead(DOWN_PIN) == 1){
+      delay(200);
+      menuIndex2++;
+      display.clearDisplay();
+      print_scrn(productViewComPtr);
+      if (menuIndex2 == 10){
+        menuIndex2 = 0;
+      }
+      display.drawBitmap(26, 4, buyMenuallArray[menuIndex2], 75, 12, 1);
+      display.display();
+      char pName[4];
+      sprintf(pName, "p%d", menuIndex2+1);
+      int price = buyResponse["products"][pName]["price"];
+      int qty = buyResponse["products"][pName]["quantity"];
+      displayPriceQuantity(price, qty);
+      delay(100);
+    }
+    else{
+      print_scrn(productViewComPtr);
+      display.drawBitmap(26, 4, buyMenuallArray[menuIndex2], 75, 12, 1);
+      display.display();
+      sprintf(pName, "p%d", menuIndex2+1);
+      int price = buyResponse["products"][pName]["price"];
+      int qty = buyResponse["products"][pName]["quantity"];
+      displayPriceQuantity(price, qty);
+      delay(100);
+    }
+    if (digitalRead(EXIT_PIN) == 1){
+      delay(200);
+      display.clearDisplay();
+      break;
+    }
+    if (digitalRead(ENTER_PIN) == 1){
+      delay(200);
+      display.clearDisplay();
+      setQuantity(pName);
+    }
     // if (digitalRead(CART_PIN) == 1){
     //   delay(200);
     //   display.clearDisplay();
