@@ -51,6 +51,17 @@ DynamicJsonDocument buyResponse(768);
 DynamicJsonDocument nearbyResponse(768);
 DynamicJsonDocument productResponse(768);
 
+char locations[][50] = {"K-Zone", "1.6 km", "vm9", 
+"Havelock City Mall", "13.0 km", "vm8",
+"Majestic City", "14.2 km", "vm6", 
+"BMICH", "15.4 km", "vm7",
+"City Centre", "17.1 km", "vm5",
+"One Galle Face", "17.7 km", "vm1",
+"Fort Railway station", "19.3 km", "vm2",
+"Sugathadāsa Stadium", "20.2 km", "vm4",
+"Lotus Tower", "20.6 km", "vm3"
+};
+
 // 'mainMenuOled', 128x64px
 const unsigned char mainMenuOled [] PROGMEM = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
@@ -519,49 +530,31 @@ void loop() {
     delay(200);
     display.clearDisplay();
     processingDisp();
-    buy();
-    delay(200);
-    int messageSize = mqttClient.parseMessage();
-    if (messageSize) {
-      // we received a message, print out the topic and contents
-      Serial.print("Received a message with topic '");
-      Serial.print(mqttClient.messageTopic());
-      Serial.print("', length ");
-      Serial.print(messageSize);
-      Serial.println(" bytes:");
+    
+    // else if (response["type"] == "product"){
+    //   productResponse = response;
+    // }
+    // serializeJson(buyResponse, payload);
 
-      String payload = "";
-      while (mqttClient.available()) {
-        payload += (char)mqttClient.read();
-      }
-
-      deserializeJson(response, payload);
-
-      if (response["type"] == "products" && response["id"] == "vm10"){
-        buyResponse = response;
-      }
-      else if (response["type"] == "products"){
-        nearbyResponse = response;
-      }
-      else if (response["type"] == "product"){
-        productResponse = response;
-      }
-      serializeJson(buyResponse, payload);
-
-      switch (menuIndex1) {
-      case 0:
-        display.clearDisplay();
-        buyMenu ();
-        break;
-      default:
-        // statements
-        break;
+    switch (menuIndex1) {
+    case 0:
+      buy();
+      display.clearDisplay();
+      buyMenu ();
+      break;
+    case 1:
+      display.clearDisplay();
+      nearbyLocations();
+      break;
+    default:
+      // statements
+      break;
     }
 
-    }
+  }
 
     
-  }
+  
   if (digitalRead(CART_PIN) == 1){
     delay(200);
     processingDisp();
@@ -576,6 +569,32 @@ void print_scrn (const unsigned char* pointer){
 }
 
 void buyMenu (){
+  int messageSize = mqttClient.parseMessage();
+  if (messageSize) {
+    // we received a message, print out the topic and contents
+    Serial.print("Received a message with topic '");
+    Serial.print(mqttClient.messageTopic());
+    Serial.print("', length ");
+    Serial.print(messageSize);
+    Serial.println(" bytes:");
+
+    String payload = "";
+    while (mqttClient.available()) {
+      payload += (char)mqttClient.read();
+    }
+
+    deserializeJson(response, payload);
+
+    if (response["type"] == "products" && response["id"] == "vm10"){
+      buyResponse = response;
+    }
+    else{
+      return;
+    }
+  }
+  else{
+    return;
+  }
   int menuIndex2 = 0;
   for(;;){
     mqttClient.poll();
@@ -665,7 +684,6 @@ void setQuantity(char pId[4]){
       if (count == 26){
         count = 0;
       }
-      delay(100);
       display.clearDisplay();
     }
     else if (digitalRead(DOWN_PIN) == 1){
@@ -674,7 +692,6 @@ void setQuantity(char pId[4]){
       if (count == -1){
         count = 25;
       }
-      delay(100);
       display.clearDisplay();
     }
     display.setTextSize(2);
@@ -897,4 +914,133 @@ void cartInit(){
   cartObject["p8"] = 0;
   cartObject["p9"] = 0;
   cartObject["p10"] = 0;
+}
+
+
+void nearbyLocations(){
+  int menuIndex = 0;
+  for(;;){
+    delay(100);
+    mqttClient.poll();
+    if (digitalRead(DOWN_PIN) == 1){
+      delay(200);
+      display.clearDisplay();
+      menuIndex++;
+      if (menuIndex == 9){
+        menuIndex = 0;
+      }
+    }
+    if (digitalRead(EXIT_PIN) == 1){
+      delay(200);
+      display.clearDisplay();
+      break;
+    }
+    if (digitalRead(ENTER_PIN) == 1){
+      delay(200);
+      display.clearDisplay();
+      nearby(locations[menuIndex*3+2]);
+      buyMenu2 (locations[menuIndex*3+2]);
+    }
+    display.setTextSize(1);
+    display.setCursor(0,0);
+    display.println(locations[menuIndex*3]);
+    display.setTextSize(2);
+    display.setCursor(0,12);
+    display.println(locations[menuIndex*3+1]);
+    display.display();
+  }
+}
+
+void nearby(const char* vId){
+  nearbyQuery["id"] = "vm10";
+  nearbyQuery["requestType"] = "products";
+  nearbyQuery["requestId"] = vId;
+
+  String payload;
+  serializeJson(nearbyQuery, payload);
+
+  bool retained = false;
+  int qos = 1;
+  bool dup = false;
+
+  mqttClient.beginMessage(queryTopic, payload.length(), retained, qos, dup);
+  mqttClient.print(payload);
+  mqttClient.endMessage();
+  delay(1000); //delay to recieve response
+}
+
+void buyMenu2 (const char* vId){
+  int messageSize = mqttClient.parseMessage();
+  if (messageSize) {
+    // we received a message, print out the topic and contents
+    Serial.print("Received a message with topic '");
+    Serial.print(mqttClient.messageTopic());
+    Serial.print("', length ");
+    Serial.print(messageSize);
+    Serial.println(" bytes:");
+
+    String payload = "";
+    while (mqttClient.available()) {
+      payload += (char)mqttClient.read();
+    }
+
+    deserializeJson(response, payload);
+
+    if (response["type"] == "products" && response["id"] != "vm10"){
+      nearbyResponse = response;
+    }
+    else{
+      return;
+    }
+  }
+  else{
+    return;
+  }
+  int menuIndex2 = 0;
+  for(;;){
+    mqttClient.poll();
+    if (digitalRead(DOWN_PIN) == 1){
+      delay(200);
+      menuIndex2++;
+      display.clearDisplay();
+      print_scrn(productViewComPtr);
+      if (menuIndex2 == 10){
+        menuIndex2 = 0;
+      }
+      display.drawBitmap(26, 4, buyMenuallArray[menuIndex2], 75, 12, 1);
+      display.display();
+      char pName[4];
+      sprintf(pName, "p%d", menuIndex2+1);
+      int price = nearbyResponse["products"][pName]["price"];
+      int qty = nearbyResponse["products"][pName]["quantity"];
+      displayPriceQuantity(price, qty);
+      delay(100);
+    }
+    else{
+      print_scrn(productViewComPtr);
+      display.drawBitmap(26, 4, buyMenuallArray[menuIndex2], 75, 12, 1);
+      display.display();
+      char pName[4];
+      sprintf(pName, "p%d", menuIndex2+1);
+      int price = nearbyResponse["products"][pName]["price"];
+      int qty = nearbyResponse["products"][pName]["quantity"];
+      displayPriceQuantity(price, qty);
+      delay(100);
+    }
+    if (digitalRead(EXIT_PIN) == 1){
+      delay(200);
+      display.clearDisplay();
+      break;
+    }
+    // if (digitalRead(ENTER_PIN) == 1){
+    //   delay(200);
+    //   display.clearDisplay();
+    //   setQuantity(pName);
+    // }
+    // if (digitalRead(CART_PIN) == 1){
+    //   delay(200);
+    //   display.clearDisplay();
+    //   cartView();
+    // }
+  }
 }
